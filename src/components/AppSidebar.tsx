@@ -1,6 +1,8 @@
-import { LayoutDashboard, Mic, Users, UtensilsCrossed, Globe, Sparkles } from "lucide-react";
+import { LayoutDashboard, Mic, Users, UtensilsCrossed, Globe, Sparkles, MessageCircle, UserCircle, LogOut } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -9,30 +11,56 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
 
-const navItems = [
+const allNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Speakers", url: "/speakers", icon: Mic },
-  { title: "Mentors", url: "/mentors", icon: Users },
-  { title: "Catering Companies", url: "/catering", icon: UtensilsCrossed },
-  { title: "Communities", url: "/communities", icon: Globe },
+  { title: "Spikerlər", url: "/speakers", icon: Mic },
+  { title: "Mentorlar", url: "/mentors", icon: Users },
+  { title: "Catering", url: "/catering", icon: UtensilsCrossed },
+  { title: "İcmalar", url: "/communities", icon: Globe },
+  { title: "Mesajlar", url: "/messages", icon: MessageCircle },
 ];
+
+const dashboardRoutes: Record<string, { url: string; title: string; icon: any }> = {
+  speaker: { url: "/dashboard/speaker", title: "Spiker Paneli", icon: Mic },
+  mentor: { url: "/dashboard/mentor", title: "Mentor Paneli", icon: Users },
+  catering: { url: "/dashboard/catering", title: "Catering Paneli", icon: UtensilsCrossed },
+  community: { url: "/dashboard/community", title: "İcma Paneli", icon: Globe },
+};
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const { role, user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/login");
+  };
+
+  const roleItem = role && role !== "user" ? dashboardRoutes[role] : null;
+
+  // Regular users see everything; other roles only see their dashboard, messages, AI
+  const isRegularUser = !role || role === "user";
+  const navItems = isRegularUser
+    ? allNavItems
+    : [
+        { title: "Mesajlar", url: "/messages", icon: MessageCircle },
+      ];
 
   return (
     <Sidebar collapsible="icon" className="border-r border-border">
       <div className="px-4 py-5 flex items-center gap-2.5">
         <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-          <span className="text-primary-foreground font-bold text-sm">CF</span>
+          <span className="text-primary-foreground font-bold text-sm">C</span>
         </div>
         {!collapsed && (
-          <span className="font-semibold text-foreground text-sm tracking-tight">CommunityForge</span>
+          <span className="font-semibold text-foreground text-sm tracking-tight">Commas</span>
         )}
       </div>
 
@@ -40,6 +68,25 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
+              {/* Role-specific dashboard link first for non-user roles */}
+              {roleItem && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink
+                      to={roleItem.url}
+                      end
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        location.pathname === roleItem.url ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      }`}
+                      activeClassName="bg-accent text-accent-foreground"
+                    >
+                      <UserCircle size={18} strokeWidth={1.5} />
+                      {!collapsed && <span>{roleItem.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
               {navItems.map((item) => {
                 const isActive = location.pathname === item.url;
                 return (
@@ -49,9 +96,7 @@ export function AppSidebar() {
                         to={item.url}
                         end
                         className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          isActive
-                            ? "bg-accent text-accent-foreground"
-                            : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                          isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                         }`}
                         activeClassName="bg-accent text-accent-foreground"
                       >
@@ -63,28 +108,19 @@ export function AppSidebar() {
                 );
               })}
 
-              {/* AI Assistant - Coming Soon */}
+              {/* AI Assistant */}
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <NavLink
                     to="/ai-assistant"
                     end
                     className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      location.pathname === "/ai-assistant"
-                        ? "bg-accent text-accent-foreground"
-                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      location.pathname === "/ai-assistant" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                     }`}
                     activeClassName="bg-accent text-accent-foreground"
                   >
                     <Sparkles size={18} strokeWidth={1.5} />
-                    {!collapsed && (
-                      <div className="flex items-center justify-between flex-1">
-                        <span>AI Assistant</span>
-                        <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 bg-secondary text-muted-foreground rounded">
-                          Soon
-                        </span>
-                      </div>
-                    )}
+                    {!collapsed && <span>AI Assistant</span>}
                   </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -92,6 +128,15 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      {user && (
+        <SidebarFooter className="p-3">
+          <Button variant="ghost" size="sm" onClick={handleSignOut} className="w-full justify-start text-muted-foreground hover:text-foreground">
+            <LogOut size={16} className="mr-2" />
+            {!collapsed && <span className="text-sm">Çıxış</span>}
+          </Button>
+        </SidebarFooter>
+      )}
     </Sidebar>
   );
 }

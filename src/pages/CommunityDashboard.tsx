@@ -1,0 +1,120 @@
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import { motion } from "framer-motion";
+import { Globe, Save } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+interface CommunityProfile {
+  community_name: string; description: string; num_events: number; locations: string;
+  leader_first_name: string; leader_last_name: string; email: string; photo_url: string | null;
+}
+
+const CommunityDashboard = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [profile, setProfile] = useState<CommunityProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<CommunityProfile>({
+    community_name: "", description: "", num_events: 0, locations: "",
+    leader_first_name: "", leader_last_name: "", email: "", photo_url: null,
+  });
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("community_profiles" as any).select("*").eq("user_id", user.id).single()
+      .then(({ data }) => {
+        if (data) { const p = data as any as CommunityProfile; setProfile(p); setForm(p); }
+        setLoading(false);
+      });
+  }, [user]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+    const { error } = await supabase.from("community_profiles" as any)
+      .update({ community_name: form.community_name, description: form.description,
+        num_events: form.num_events, locations: form.locations,
+        leader_first_name: form.leader_first_name, leader_last_name: form.leader_last_name,
+        photo_url: form.photo_url } as any)
+      .eq("user_id", user.id);
+    setSaving(false);
+    if (error) { toast({ title: "Xəta", description: error.message, variant: "destructive" }); }
+    else { setProfile(form); setEditing(false); toast({ title: "Uğurlu", description: "Profil yeniləndi." }); }
+  };
+
+  if (loading) return <div className="flex items-center justify-center p-12"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center"><Globe size={20} className="text-primary" /></div>
+            <div>
+              <h1 className="text-2xl font-semibold text-foreground">İcma Paneli</h1>
+              <p className="text-sm text-muted-foreground">İcma profilinizi idarə edin</p>
+            </div>
+          </div>
+          {!editing && <Button onClick={() => setEditing(true)} variant="outline">Redaktə et</Button>}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="md:col-span-1">
+            <CardContent className="pt-6 flex flex-col items-center text-center">
+              <Avatar className="w-24 h-24 mb-4">
+                <AvatarImage src={profile?.photo_url || ""} />
+                <AvatarFallback className="bg-primary/10 text-primary text-xl">{profile?.community_name?.[0]}</AvatarFallback>
+              </Avatar>
+              <h2 className="text-lg font-semibold text-foreground">{profile?.community_name}</h2>
+              <p className="text-sm text-muted-foreground">{profile?.locations}</p>
+              <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="px-2 py-1 bg-accent rounded-md">{profile?.num_events} tədbir</span>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="md:col-span-2">
+            <CardHeader><CardTitle className="text-lg">İcma Məlumatları</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {editing ? (
+                <>
+                  <div className="space-y-2"><Label>İcma adı</Label><Input value={form.community_name} onChange={e => setForm({ ...form, community_name: e.target.value })} /></div>
+                  <div className="space-y-2"><Label>Təsvir</Label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2"><Label>Tədbir sayı</Label><Input type="number" value={form.num_events} onChange={e => setForm({ ...form, num_events: Number(e.target.value) })} /></div>
+                    <div className="space-y-2"><Label>Məkanlar</Label><Input value={form.locations} onChange={e => setForm({ ...form, locations: e.target.value })} /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2"><Label>Lider adı</Label><Input value={form.leader_first_name} onChange={e => setForm({ ...form, leader_first_name: e.target.value })} /></div>
+                    <div className="space-y-2"><Label>Lider soyadı</Label><Input value={form.leader_last_name} onChange={e => setForm({ ...form, leader_last_name: e.target.value })} /></div>
+                  </div>
+                  <div className="space-y-2"><Label>İcma şəkli URL</Label><Input value={form.photo_url || ""} onChange={e => setForm({ ...form, photo_url: e.target.value })} /></div>
+                  <div className="flex gap-2">
+                    <Button onClick={handleSave} disabled={saving}><Save size={16} className="mr-1" />{saving ? "Saxlanılır..." : "Saxla"}</Button>
+                    <Button variant="outline" onClick={() => { setEditing(false); if (profile) setForm(profile); }}>Ləğv et</Button>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <div><span className="text-sm font-medium text-muted-foreground">Lider:</span> <span className="text-sm text-foreground">{profile?.leader_first_name} {profile?.leader_last_name}</span></div>
+                  <div><span className="text-sm font-medium text-muted-foreground">Email:</span> <span className="text-sm text-foreground">{profile?.email}</span></div>
+                  <div><span className="text-sm font-medium text-muted-foreground">Təsvir:</span> <span className="text-sm text-foreground">{profile?.description || "—"}</span></div>
+                  <div><span className="text-sm font-medium text-muted-foreground">Məkanlar:</span> <span className="text-sm text-foreground">{profile?.locations || "—"}</span></div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+export default CommunityDashboard;

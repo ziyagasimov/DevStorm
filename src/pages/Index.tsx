@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { Mic, Users, UtensilsCrossed, Globe, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-
+import { useAuth } from "@/contexts/AuthContext";
 const cards = [
   {
     title: "Speakers",
@@ -31,6 +31,15 @@ const cards = [
 
 const Index = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const handleStartBuilding = () => {
+    if (user) {
+      navigate("/communities");
+    } else {
+      navigate("/login");
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto py-12 px-8">
@@ -50,7 +59,7 @@ const Index = () => {
         <div className="flex gap-4 flex-wrap">
           <motion.button
             whileTap={{ scale: 0.97 }}
-            onClick={() => navigate("/communities")}
+            onClick={handleStartBuilding}
             className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium transition-colors hover:opacity-90"
           >
             Start Building a Community
