@@ -81,10 +81,10 @@ messages          — Chat messages with realtime subscriptions
 ### Installation
 ```bash
 # Clone the repository
-git clone <https://github.com/ziyagasimov/DevStorm.git>
+git clone https://github.com/ziyagasimov/DevStorm.git
 
 # Navigate to project directory
-cd <DevStorm>
+cd DevStorm
 
 # Install dependencies
 npm install
