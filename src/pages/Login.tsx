@@ -1,4 +1,8 @@
-import { useState } from "react";
+/**
+ * Login Page — Email/password authentication with role-based redirection.
+ * Uses Zod validation for input sanitization before Supabase auth call.
+ */
+import { useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,6 +12,18 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { LogIn } from "lucide-react";
+import { loginSchema } from "@/lib/validation";
+import type { Database } from "@/integrations/supabase/types";
+
+type AppRole = Database["public"]["Enums"]["app_role"];
+
+/** Maps role to corresponding dashboard URL */
+const DASHBOARD_ROUTES: Record<string, string> = {
+  speaker: "/dashboard/speaker",
+  mentor: "/dashboard/mentor",
+  catering: "/dashboard/catering",
+  community: "/dashboard/community",
+};
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -16,36 +32,38 @@ const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) {
-      toast({ title: "Xəta", description: "Bütün sahələri doldurun.", variant: "destructive" });
+
+    // Validate inputs with Zod
+    const validation = loginSchema.safeParse({ email, password });
+    if (!validation.success) {
+      toast({ title: "Xəta", description: validation.error.errors[0].message, variant: "destructive" });
       return;
     }
+
     setLoading(true);
-    const { data: authData, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
+      email: validation.data.email,
+      password: validation.data.password,
+    });
     setLoading(false);
+
     if (error) {
       toast({ title: "Giriş uğursuz", description: error.message, variant: "destructive" });
       return;
     }
 
-    // Get user role and redirect accordingly
+    // Fetch role via SECURITY DEFINER RPC and redirect accordingly
     const userId = authData.user?.id;
     if (userId) {
-      const { data: roleData } = await supabase.from("user_roles" as any).select("role").eq("user_id", userId).limit(1).maybeSingle();
-      const role = (roleData as any)?.role || "user";
-      switch (role) {
-        case "speaker": navigate("/dashboard/speaker"); break;
-        case "mentor": navigate("/dashboard/mentor"); break;
-        case "catering": navigate("/dashboard/catering"); break;
-        case "community": navigate("/dashboard/community"); break;
-        default: navigate("/"); break;
-      }
+      const { data: role } = await supabase.rpc("get_user_role", { _user_id: userId });
+      const userRole = (role as AppRole) || "user";
+      navigate(DASHBOARD_ROUTES[userRole] || "/");
     } else {
       navigate("/");
     }
-  };
+  }, [email, password, navigate, toast]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -66,11 +84,11 @@ const Login = () => {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="sizin@email.com" value={email} onChange={e => setEmail(e.target.value)} required />
+                <Input id="email" type="email" placeholder="sizin@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required maxLength={255} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Şifrə</Label>
-                <Input id="password" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
+                <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required maxLength={128} />
               </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-3">

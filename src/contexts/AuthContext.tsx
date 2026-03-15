@@ -1,8 +1,16 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+/**
+ * AuthContext — Global authentication state management.
+ * 
+ * Provides user session, role information, and sign-out functionality.
+ * Role is fetched from the `user_roles` table using a SECURITY DEFINER
+ * function to bypass RLS restrictions safely.
+ */
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 
-export type AppRole = "user" | "speaker" | "mentor" | "catering" | "community";
+export type AppRole = Database["public"]["Enums"]["app_role"];
 
 interface AuthContextType {
   session: Session | null;
@@ -27,25 +35,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<AppRole | null>(null);
 
-  const fetchRole = async (userId: string) => {
-    const { data } = await supabase
-      .from("user_roles" as any)
-      .select("role")
-      .eq("user_id", userId)
-      .limit(1)
-      .maybeSingle();
-    if (data) {
-      setRole((data as any).role as AppRole);
-    } else {
-      setRole("user"); // default
-    }
-  };
+  /** Fetch user role via RPC to avoid RLS issues on user_roles table */
+  const fetchRole = useCallback(async (userId: string) => {
+    const { data } = await supabase.rpc("get_user_role", { _user_id: userId });
+    setRole((data as AppRole) || "user");
+  }, []);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
         if (session?.user) {
+          // Defer to avoid Supabase auth deadlock
           setTimeout(() => fetchRole(session.user.id), 0);
         } else {
           setRole(null);
@@ -64,12 +65,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [fetchRole]);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setRole(null);
-  };
+  }, []);
 
   return (
     <AuthContext.Provider value={{ session, user: session?.user ?? null, loading, role, signOut }}>

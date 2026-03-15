@@ -1,4 +1,8 @@
-import { useEffect, useState } from "react";
+/**
+ * Community Dashboard — Profile management for community role users.
+ * Allows viewing and editing community profile data stored in Supabase.
+ */
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -10,11 +14,11 @@ import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { Globe, Save } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import type { Tables } from "@/integrations/supabase/types";
 
-interface CommunityProfile {
-  community_name: string; description: string; num_events: number; locations: string;
-  leader_first_name: string; leader_last_name: string; email: string; photo_url: string | null;
-}
+type CommunityProfile = Pick<Tables<"community_profiles">,
+  "community_name" | "description" | "num_events" | "locations" | "leader_first_name" | "leader_last_name" | "email" | "photo_url"
+>;
 
 const CommunityDashboard = () => {
   const { user } = useAuth();
@@ -30,26 +34,30 @@ const CommunityDashboard = () => {
 
   useEffect(() => {
     if (!user) return;
-    supabase.from("community_profiles" as any).select("*").eq("user_id", user.id).single()
+    supabase.from("community_profiles")
+      .select("community_name, description, num_events, locations, leader_first_name, leader_last_name, email, photo_url")
+      .eq("user_id", user.id).single()
       .then(({ data }) => {
-        if (data) { const p = data as any as CommunityProfile; setProfile(p); setForm(p); }
+        if (data) { setProfile(data); setForm(data); }
         setLoading(false);
       });
   }, [user]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!user) return;
     setSaving(true);
-    const { error } = await supabase.from("community_profiles" as any)
-      .update({ community_name: form.community_name, description: form.description,
+    const { error } = await supabase.from("community_profiles")
+      .update({
+        community_name: form.community_name, description: form.description,
         num_events: form.num_events, locations: form.locations,
         leader_first_name: form.leader_first_name, leader_last_name: form.leader_last_name,
-        photo_url: form.photo_url } as any)
+        photo_url: form.photo_url,
+      })
       .eq("user_id", user.id);
     setSaving(false);
     if (error) { toast({ title: "Xəta", description: error.message, variant: "destructive" }); }
     else { setProfile(form); setEditing(false); toast({ title: "Uğurlu", description: "Profil yeniləndi." }); }
-  };
+  }, [user, form, toast]);
 
   if (loading) return <div className="flex items-center justify-center p-12"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
@@ -85,17 +93,17 @@ const CommunityDashboard = () => {
             <CardContent className="space-y-4">
               {editing ? (
                 <>
-                  <div className="space-y-2"><Label>İcma adı</Label><Input value={form.community_name} onChange={e => setForm({ ...form, community_name: e.target.value })} /></div>
-                  <div className="space-y-2"><Label>Təsvir</Label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} /></div>
+                  <div className="space-y-2"><Label>İcma adı</Label><Input value={form.community_name} onChange={(e) => setForm({ ...form, community_name: e.target.value })} maxLength={200} /></div>
+                  <div className="space-y-2"><Label>Təsvir</Label><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} maxLength={1000} /></div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2"><Label>Tədbir sayı</Label><Input type="number" value={form.num_events} onChange={e => setForm({ ...form, num_events: Number(e.target.value) })} /></div>
-                    <div className="space-y-2"><Label>Məkanlar</Label><Input value={form.locations} onChange={e => setForm({ ...form, locations: e.target.value })} /></div>
+                    <div className="space-y-2"><Label>Tədbir sayı</Label><Input type="number" value={form.num_events} onChange={(e) => setForm({ ...form, num_events: Number(e.target.value) })} min={0} max={9999} /></div>
+                    <div className="space-y-2"><Label>Məkanlar</Label><Input value={form.locations} onChange={(e) => setForm({ ...form, locations: e.target.value })} maxLength={300} /></div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2"><Label>Lider adı</Label><Input value={form.leader_first_name} onChange={e => setForm({ ...form, leader_first_name: e.target.value })} /></div>
-                    <div className="space-y-2"><Label>Lider soyadı</Label><Input value={form.leader_last_name} onChange={e => setForm({ ...form, leader_last_name: e.target.value })} /></div>
+                    <div className="space-y-2"><Label>Lider adı</Label><Input value={form.leader_first_name} onChange={(e) => setForm({ ...form, leader_first_name: e.target.value })} maxLength={100} /></div>
+                    <div className="space-y-2"><Label>Lider soyadı</Label><Input value={form.leader_last_name} onChange={(e) => setForm({ ...form, leader_last_name: e.target.value })} maxLength={100} /></div>
                   </div>
-                  <div className="space-y-2"><Label>İcma şəkli URL</Label><Input value={form.photo_url || ""} onChange={e => setForm({ ...form, photo_url: e.target.value })} /></div>
+                  <div className="space-y-2"><Label>İcma şəkli URL</Label><Input value={form.photo_url || ""} onChange={(e) => setForm({ ...form, photo_url: e.target.value })} maxLength={500} /></div>
                   <div className="flex gap-2">
                     <Button onClick={handleSave} disabled={saving}><Save size={16} className="mr-1" />{saving ? "Saxlanılır..." : "Saxla"}</Button>
                     <Button variant="outline" onClick={() => { setEditing(false); if (profile) setForm(profile); }}>Ləğv et</Button>

@@ -1,3 +1,12 @@
+/**
+ * App Root — Route configuration with ErrorBoundary protection.
+ * 
+ * Architecture:
+ * - AuthProvider wraps all routes for global auth state
+ * - ProtectedRoute handles role-based access control
+ * - ErrorBoundary prevents individual page crashes from breaking the entire app
+ * - React Query configured for server state management
+ */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -6,6 +15,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/AppLayout";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import Speakers from "./pages/Speakers";
 import Mentors from "./pages/Mentors";
@@ -31,23 +41,25 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/" element={<ProtectedRoute userOnly><AppLayout><Index /></AppLayout></ProtectedRoute>} />
-            <Route path="/speakers" element={<ProtectedRoute userOnly><AppLayout><Speakers /></AppLayout></ProtectedRoute>} />
-            <Route path="/mentors" element={<ProtectedRoute userOnly><AppLayout><Mentors /></AppLayout></ProtectedRoute>} />
-            <Route path="/catering" element={<ProtectedRoute userOnly><AppLayout><Catering /></AppLayout></ProtectedRoute>} />
-            <Route path="/communities" element={<ProtectedRoute userOnly><AppLayout><Communities /></AppLayout></ProtectedRoute>} />
-            <Route path="/ai-assistant" element={<ProtectedRoute><AppLayout><AIAssistant /></AppLayout></ProtectedRoute>} />
-            <Route path="/dashboard/speaker" element={<ProtectedRoute><AppLayout><SpeakerDashboard /></AppLayout></ProtectedRoute>} />
-            <Route path="/dashboard/mentor" element={<ProtectedRoute><AppLayout><MentorDashboard /></AppLayout></ProtectedRoute>} />
-            <Route path="/dashboard/catering" element={<ProtectedRoute><AppLayout><CateringDashboard /></AppLayout></ProtectedRoute>} />
-            <Route path="/dashboard/community" element={<ProtectedRoute><AppLayout><CommunityDashboard /></AppLayout></ProtectedRoute>} />
-            <Route path="/messages" element={<ProtectedRoute><AppLayout><Messages /></AppLayout></ProtectedRoute>} />
-            <Route path="/profile/:userId" element={<ProtectedRoute><AppLayout><PublicProfile /></AppLayout></ProtectedRoute>} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/" element={<ProtectedRoute userOnly><AppLayout><Index /></AppLayout></ProtectedRoute>} />
+              <Route path="/speakers" element={<ProtectedRoute userOnly><AppLayout><Speakers /></AppLayout></ProtectedRoute>} />
+              <Route path="/mentors" element={<ProtectedRoute userOnly><AppLayout><Mentors /></AppLayout></ProtectedRoute>} />
+              <Route path="/catering" element={<ProtectedRoute userOnly><AppLayout><Catering /></AppLayout></ProtectedRoute>} />
+              <Route path="/communities" element={<ProtectedRoute userOnly><AppLayout><Communities /></AppLayout></ProtectedRoute>} />
+              <Route path="/ai-assistant" element={<ProtectedRoute><AppLayout><AIAssistant /></AppLayout></ProtectedRoute>} />
+              <Route path="/dashboard/speaker" element={<ProtectedRoute><AppLayout><SpeakerDashboard /></AppLayout></ProtectedRoute>} />
+              <Route path="/dashboard/mentor" element={<ProtectedRoute><AppLayout><MentorDashboard /></AppLayout></ProtectedRoute>} />
+              <Route path="/dashboard/catering" element={<ProtectedRoute><AppLayout><CateringDashboard /></AppLayout></ProtectedRoute>} />
+              <Route path="/dashboard/community" element={<ProtectedRoute><AppLayout><CommunityDashboard /></AppLayout></ProtectedRoute>} />
+              <Route path="/messages" element={<ProtectedRoute><AppLayout><Messages /></AppLayout></ProtectedRoute>} />
+              <Route path="/profile/:userId" element={<ProtectedRoute><AppLayout><PublicProfile /></AppLayout></ProtectedRoute>} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </ErrorBoundary>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

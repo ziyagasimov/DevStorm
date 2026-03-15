@@ -1,4 +1,8 @@
-import { useEffect, useState } from "react";
+/**
+ * Catering Dashboard — Profile management for catering role users.
+ * Allows viewing and editing catering company profile data stored in Supabase.
+ */
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -10,11 +14,11 @@ import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { UtensilsCrossed, Save } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import type { Tables } from "@/integrations/supabase/types";
 
-interface CateringProfile {
-  company_name: string; services_offered: string; pricing: string; location: string;
-  manager_first_name: string; manager_last_name: string; email: string; photo_url: string | null;
-}
+type CateringProfile = Pick<Tables<"catering_profiles">,
+  "company_name" | "services_offered" | "pricing" | "location" | "manager_first_name" | "manager_last_name" | "email" | "photo_url"
+>;
 
 const CateringDashboard = () => {
   const { user } = useAuth();
@@ -30,26 +34,30 @@ const CateringDashboard = () => {
 
   useEffect(() => {
     if (!user) return;
-    supabase.from("catering_profiles" as any).select("*").eq("user_id", user.id).single()
+    supabase.from("catering_profiles")
+      .select("company_name, services_offered, pricing, location, manager_first_name, manager_last_name, email, photo_url")
+      .eq("user_id", user.id).single()
       .then(({ data }) => {
-        if (data) { const p = data as any as CateringProfile; setProfile(p); setForm(p); }
+        if (data) { setProfile(data); setForm(data); }
         setLoading(false);
       });
   }, [user]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!user) return;
     setSaving(true);
-    const { error } = await supabase.from("catering_profiles" as any)
-      .update({ company_name: form.company_name, services_offered: form.services_offered,
+    const { error } = await supabase.from("catering_profiles")
+      .update({
+        company_name: form.company_name, services_offered: form.services_offered,
         pricing: form.pricing, location: form.location,
         manager_first_name: form.manager_first_name, manager_last_name: form.manager_last_name,
-        photo_url: form.photo_url } as any)
+        photo_url: form.photo_url,
+      })
       .eq("user_id", user.id);
     setSaving(false);
     if (error) { toast({ title: "Xəta", description: error.message, variant: "destructive" }); }
     else { setProfile(form); setEditing(false); toast({ title: "Uğurlu", description: "Profil yeniləndi." }); }
-  };
+  }, [user, form, toast]);
 
   if (loading) return <div className="flex items-center justify-center p-12"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
@@ -83,17 +91,17 @@ const CateringDashboard = () => {
             <CardContent className="space-y-4">
               {editing ? (
                 <>
-                  <div className="space-y-2"><Label>Şirkət adı</Label><Input value={form.company_name} onChange={e => setForm({ ...form, company_name: e.target.value })} /></div>
-                  <div className="space-y-2"><Label>Xidmətlər</Label><Textarea value={form.services_offered} onChange={e => setForm({ ...form, services_offered: e.target.value })} rows={2} /></div>
+                  <div className="space-y-2"><Label>Şirkət adı</Label><Input value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} maxLength={200} /></div>
+                  <div className="space-y-2"><Label>Xidmətlər</Label><Textarea value={form.services_offered} onChange={(e) => setForm({ ...form, services_offered: e.target.value })} rows={2} maxLength={1000} /></div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2"><Label>Qiymət aralığı</Label><Input value={form.pricing} onChange={e => setForm({ ...form, pricing: e.target.value })} /></div>
-                    <div className="space-y-2"><Label>Ünvan</Label><Input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} /></div>
+                    <div className="space-y-2"><Label>Qiymət aralığı</Label><Input value={form.pricing} onChange={(e) => setForm({ ...form, pricing: e.target.value })} maxLength={200} /></div>
+                    <div className="space-y-2"><Label>Ünvan</Label><Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} maxLength={300} /></div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2"><Label>Menecer adı</Label><Input value={form.manager_first_name} onChange={e => setForm({ ...form, manager_first_name: e.target.value })} /></div>
-                    <div className="space-y-2"><Label>Menecer soyadı</Label><Input value={form.manager_last_name} onChange={e => setForm({ ...form, manager_last_name: e.target.value })} /></div>
+                    <div className="space-y-2"><Label>Menecer adı</Label><Input value={form.manager_first_name} onChange={(e) => setForm({ ...form, manager_first_name: e.target.value })} maxLength={100} /></div>
+                    <div className="space-y-2"><Label>Menecer soyadı</Label><Input value={form.manager_last_name} onChange={(e) => setForm({ ...form, manager_last_name: e.target.value })} maxLength={100} /></div>
                   </div>
-                  <div className="space-y-2"><Label>Logo/şəkil URL</Label><Input value={form.photo_url || ""} onChange={e => setForm({ ...form, photo_url: e.target.value })} /></div>
+                  <div className="space-y-2"><Label>Logo/şəkil URL</Label><Input value={form.photo_url || ""} onChange={(e) => setForm({ ...form, photo_url: e.target.value })} maxLength={500} /></div>
                   <div className="flex gap-2">
                     <Button onClick={handleSave} disabled={saving}><Save size={16} className="mr-1" />{saving ? "Saxlanılır..." : "Saxla"}</Button>
                     <Button variant="outline" onClick={() => { setEditing(false); if (profile) setForm(profile); }}>Ləğv et</Button>

@@ -1,4 +1,8 @@
-import { useEffect, useState } from "react";
+/**
+ * Mentor Dashboard — Profile management for mentor role users.
+ * Allows viewing and editing mentor profile data stored in Supabase.
+ */
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -10,11 +14,11 @@ import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { Users, Save } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import type { Tables } from "@/integrations/supabase/types";
 
-interface MentorProfile {
-  first_name: string; last_name: string; email: string; experience: string;
-  expertise_area: string; years_of_experience: number; description: string; photo_url: string | null;
-}
+type MentorProfile = Pick<Tables<"mentor_profiles">,
+  "first_name" | "last_name" | "email" | "experience" | "expertise_area" | "years_of_experience" | "description" | "photo_url"
+>;
 
 const MentorDashboard = () => {
   const { user } = useAuth();
@@ -30,25 +34,29 @@ const MentorDashboard = () => {
 
   useEffect(() => {
     if (!user) return;
-    supabase.from("mentor_profiles" as any).select("*").eq("user_id", user.id).single()
+    supabase.from("mentor_profiles")
+      .select("first_name, last_name, email, experience, expertise_area, years_of_experience, description, photo_url")
+      .eq("user_id", user.id).single()
       .then(({ data }) => {
-        if (data) { const p = data as any as MentorProfile; setProfile(p); setForm(p); }
+        if (data) { setProfile(data); setForm(data); }
         setLoading(false);
       });
   }, [user]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!user) return;
     setSaving(true);
-    const { error } = await supabase.from("mentor_profiles" as any)
-      .update({ first_name: form.first_name, last_name: form.last_name, experience: form.experience,
+    const { error } = await supabase.from("mentor_profiles")
+      .update({
+        first_name: form.first_name, last_name: form.last_name, experience: form.experience,
         expertise_area: form.expertise_area, years_of_experience: form.years_of_experience,
-        description: form.description, photo_url: form.photo_url } as any)
+        description: form.description, photo_url: form.photo_url,
+      })
       .eq("user_id", user.id);
     setSaving(false);
     if (error) { toast({ title: "Xəta", description: error.message, variant: "destructive" }); }
     else { setProfile(form); setEditing(false); toast({ title: "Uğurlu", description: "Profil yeniləndi." }); }
-  };
+  }, [user, form, toast]);
 
   if (loading) return <div className="flex items-center justify-center p-12"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
@@ -85,16 +93,16 @@ const MentorDashboard = () => {
               {editing ? (
                 <>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2"><Label>Ad</Label><Input value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} /></div>
-                    <div className="space-y-2"><Label>Soyad</Label><Input value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} /></div>
+                    <div className="space-y-2"><Label>Ad</Label><Input value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} maxLength={100} /></div>
+                    <div className="space-y-2"><Label>Soyad</Label><Input value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} maxLength={100} /></div>
                   </div>
-                  <div className="space-y-2"><Label>Ekspertiza sahəsi</Label><Input value={form.expertise_area} onChange={e => setForm({ ...form, expertise_area: e.target.value })} /></div>
+                  <div className="space-y-2"><Label>Ekspertiza sahəsi</Label><Input value={form.expertise_area} onChange={(e) => setForm({ ...form, expertise_area: e.target.value })} maxLength={200} /></div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2"><Label>Təcrübə</Label><Input value={form.experience} onChange={e => setForm({ ...form, experience: e.target.value })} /></div>
-                    <div className="space-y-2"><Label>Təcrübə ili</Label><Input type="number" value={form.years_of_experience} onChange={e => setForm({ ...form, years_of_experience: Number(e.target.value) })} /></div>
+                    <div className="space-y-2"><Label>Təcrübə</Label><Input value={form.experience} onChange={(e) => setForm({ ...form, experience: e.target.value })} maxLength={500} /></div>
+                    <div className="space-y-2"><Label>Təcrübə ili</Label><Input type="number" value={form.years_of_experience} onChange={(e) => setForm({ ...form, years_of_experience: Number(e.target.value) })} min={0} max={99} /></div>
                   </div>
-                  <div className="space-y-2"><Label>Təsvir</Label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} /></div>
-                  <div className="space-y-2"><Label>Profil şəkli URL</Label><Input value={form.photo_url || ""} onChange={e => setForm({ ...form, photo_url: e.target.value })} /></div>
+                  <div className="space-y-2"><Label>Təsvir</Label><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} maxLength={1000} /></div>
+                  <div className="space-y-2"><Label>Profil şəkli URL</Label><Input value={form.photo_url || ""} onChange={(e) => setForm({ ...form, photo_url: e.target.value })} maxLength={500} /></div>
                   <div className="flex gap-2">
                     <Button onClick={handleSave} disabled={saving}><Save size={16} className="mr-1" />{saving ? "Saxlanılır..." : "Saxla"}</Button>
                     <Button variant="outline" onClick={() => { setEditing(false); if (profile) setForm(profile); }}>Ləğv et</Button>

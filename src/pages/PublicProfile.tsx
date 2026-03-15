@@ -1,4 +1,9 @@
-import { useEffect, useState } from "react";
+/**
+ * PublicProfile — Displays a user's public profile based on their role.
+ * Fetches role via RPC and then loads the corresponding profile table.
+ * Uses `create_conversation` RPC for atomic chat creation.
+ */
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,13 +12,24 @@ import { Card, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
 import { MessageCircle, ArrowLeft } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import type { Tables, Database } from "@/integrations/supabase/types";
+
+type AppRole = Database["public"]["Enums"]["app_role"];
+
+// Union type for all possible profile shapes
+type ProfileData =
+  | Tables<"speaker_profiles">
+  | Tables<"mentor_profiles">
+  | Tables<"catering_profiles">
+  | Tables<"community_profiles">
+  | Tables<"profiles">;
 
 const PublicProfile = () => {
   const { userId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [profileData, setProfileData] = useState<any>(null);
-  const [role, setRole] = useState<string | null>(null);
+  const [profileData, setProfileData] = useState<ProfileData | null>(null);
+  const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,27 +38,28 @@ const PublicProfile = () => {
   }, [userId]);
 
   const loadProfile = async () => {
-    // Get user role
-    const { data: roleData } = await supabase
-      .from("user_roles" as any).select("role").eq("user_id", userId).single();
-    const userRole = (roleData as any)?.role || "user";
-    setRole(userRole);
+    // Fetch role via SECURITY DEFINER RPC — avoids RLS issues
+    const { data: userRole } = await supabase.rpc("get_user_role", { _user_id: userId! });
+    const resolvedRole = (userRole as AppRole) || "user";
+    setRole(resolvedRole);
 
-    let profile: any = null;
-    if (userRole === "speaker") {
-      const { data } = await supabase.from("speaker_profiles" as any).select("*").eq("user_id", userId).single();
+    let profile: ProfileData | null = null;
+
+    // Load role-specific profile from corresponding table
+    if (resolvedRole === "speaker") {
+      const { data } = await supabase.from("speaker_profiles").select("*").eq("user_id", userId!).single();
       profile = data;
-    } else if (userRole === "mentor") {
-      const { data } = await supabase.from("mentor_profiles" as any).select("*").eq("user_id", userId).single();
+    } else if (resolvedRole === "mentor") {
+      const { data } = await supabase.from("mentor_profiles").select("*").eq("user_id", userId!).single();
       profile = data;
-    } else if (userRole === "catering") {
-      const { data } = await supabase.from("catering_profiles" as any).select("*").eq("user_id", userId).single();
+    } else if (resolvedRole === "catering") {
+      const { data } = await supabase.from("catering_profiles").select("*").eq("user_id", userId!).single();
       profile = data;
-    } else if (userRole === "community") {
-      const { data } = await supabase.from("community_profiles" as any).select("*").eq("user_id", userId).single();
+    } else if (resolvedRole === "community") {
+      const { data } = await supabase.from("community_profiles").select("*").eq("user_id", userId!).single();
       profile = data;
     } else {
-      const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
+      const { data } = await supabase.from("profiles").select("*").eq("id", userId!).single();
       profile = data;
     }
 
@@ -50,50 +67,50 @@ const PublicProfile = () => {
     setLoading(false);
   };
 
-  const startChat = async () => {
+  /** Start chat using atomic RPC — prevents race conditions with RLS */
+  const startChat = useCallback(async () => {
     if (!user || !userId) return;
-    // Check existing conversation
-    const { data: myParticipations } = await supabase
-      .from("conversation_participants" as any).select("conversation_id").eq("user_id", user.id);
-    
-    if (myParticipations) {
-      for (const p of myParticipations as any[]) {
-        const { data: otherP } = await supabase
-          .from("conversation_participants" as any).select("user_id")
-          .eq("conversation_id", p.conversation_id).eq("user_id", userId);
-        if (otherP && (otherP as any[]).length > 0) {
-          navigate("/messages");
-          return;
-        }
-      }
-    }
 
-    const { data: conv } = await supabase.from("conversations" as any).insert({} as any).select("id").single();
-    if (conv) {
-      const convId = (conv as any).id;
-      await supabase.from("conversation_participants" as any).insert([
-        { conversation_id: convId, user_id: user.id },
-        { conversation_id: convId, user_id: userId },
-      ] as any);
+    const { data: convId, error } = await supabase.rpc("create_conversation", {
+      other_user_id: userId,
+    });
+
+    if (convId && !error) {
       navigate("/messages");
     }
-  };
+  }, [user, userId, navigate]);
 
-  if (loading) return <div className="flex items-center justify-center p-12"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
-  if (!profileData) return <div className="p-6 text-center text-muted-foreground">Profil tapılmadı</div>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
+  if (!profileData) {
+    return <div className="p-6 text-center text-muted-foreground">Profil tapılmadı</div>;
+  }
+
+  // Type-safe accessors based on role
   const getName = () => {
-    if (role === "catering") return profileData.company_name;
-    if (role === "community") return profileData.community_name;
-    return `${profileData.first_name || ""} ${profileData.last_name || ""}`.trim();
+    if (role === "catering" && "company_name" in profileData) return profileData.company_name;
+    if (role === "community" && "community_name" in profileData) return profileData.community_name;
+    if ("first_name" in profileData) return `${profileData.first_name || ""} ${profileData.last_name || ""}`.trim();
+    return "İstifadəçi";
   };
 
   const getSubtitle = () => {
-    if (role === "speaker") return profileData.expertise;
-    if (role === "mentor") return profileData.expertise_area;
-    if (role === "catering") return profileData.location;
-    if (role === "community") return profileData.locations;
+    if (role === "speaker" && "expertise" in profileData) return profileData.expertise;
+    if (role === "mentor" && "expertise_area" in profileData) return profileData.expertise_area;
+    if (role === "catering" && "location" in profileData) return profileData.location;
+    if (role === "community" && "locations" in profileData) return profileData.locations;
     return "";
+  };
+
+  const getPhotoUrl = () => {
+    if ("photo_url" in profileData) return profileData.photo_url;
+    return null;
   };
 
   return (
@@ -106,7 +123,7 @@ const PublicProfile = () => {
           <CardContent className="pt-6">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
               <Avatar className="w-28 h-28">
-                <AvatarImage src={profileData.photo_url || ""} />
+                <AvatarImage src={getPhotoUrl() || ""} />
                 <AvatarFallback className="bg-primary/10 text-primary text-3xl">{getName()[0]}</AvatarFallback>
               </Avatar>
               <div className="flex-1 text-center sm:text-left">
@@ -116,31 +133,31 @@ const PublicProfile = () => {
                 </div>
                 <p className="text-muted-foreground">{getSubtitle()}</p>
 
-                {role === "speaker" && (
+                {role === "speaker" && "company" in profileData && (
                   <div className="mt-4 space-y-2 text-sm">
                     <p><span className="font-medium text-muted-foreground">Şirkət:</span> {profileData.company || "—"}</p>
-                    <p><span className="font-medium text-muted-foreground">Təcrübə:</span> {profileData.years_of_experience} il</p>
-                    <p><span className="font-medium text-muted-foreground">Bio:</span> {profileData.bio || "—"}</p>
+                    <p><span className="font-medium text-muted-foreground">Təcrübə:</span> {"years_of_experience" in profileData ? profileData.years_of_experience : 0} il</p>
+                    <p><span className="font-medium text-muted-foreground">Bio:</span> {"bio" in profileData ? profileData.bio : "—"}</p>
                   </div>
                 )}
-                {role === "mentor" && (
+                {role === "mentor" && "description" in profileData && (
                   <div className="mt-4 space-y-2 text-sm">
-                    <p><span className="font-medium text-muted-foreground">Təcrübə:</span> {profileData.years_of_experience} il</p>
+                    <p><span className="font-medium text-muted-foreground">Təcrübə:</span> {"years_of_experience" in profileData ? profileData.years_of_experience : 0} il</p>
                     <p><span className="font-medium text-muted-foreground">Təsvir:</span> {profileData.description || "—"}</p>
                   </div>
                 )}
-                {role === "catering" && (
+                {role === "catering" && "services_offered" in profileData && (
                   <div className="mt-4 space-y-2 text-sm">
                     <p><span className="font-medium text-muted-foreground">Xidmətlər:</span> {profileData.services_offered || "—"}</p>
-                    <p><span className="font-medium text-muted-foreground">Qiymət:</span> {profileData.pricing || "—"}</p>
-                    <p><span className="font-medium text-muted-foreground">Menecer:</span> {profileData.manager_first_name} {profileData.manager_last_name}</p>
+                    <p><span className="font-medium text-muted-foreground">Qiymət:</span> {"pricing" in profileData ? profileData.pricing : "—"}</p>
+                    <p><span className="font-medium text-muted-foreground">Menecer:</span> {"manager_first_name" in profileData ? `${profileData.manager_first_name} ${profileData.manager_last_name}` : "—"}</p>
                   </div>
                 )}
-                {role === "community" && (
+                {role === "community" && "description" in profileData && (
                   <div className="mt-4 space-y-2 text-sm">
                     <p><span className="font-medium text-muted-foreground">Təsvir:</span> {profileData.description || "—"}</p>
-                    <p><span className="font-medium text-muted-foreground">Tədbir sayı:</span> {profileData.num_events}</p>
-                    <p><span className="font-medium text-muted-foreground">Lider:</span> {profileData.leader_first_name} {profileData.leader_last_name}</p>
+                    <p><span className="font-medium text-muted-foreground">Tədbir sayı:</span> {"num_events" in profileData ? profileData.num_events : 0}</p>
+                    <p><span className="font-medium text-muted-foreground">Lider:</span> {"leader_first_name" in profileData ? `${profileData.leader_first_name} ${profileData.leader_last_name}` : "—"}</p>
                   </div>
                 )}
 
